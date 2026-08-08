@@ -144,3 +144,14 @@ jobs:
               issue_number: context.issue.number,
               body,
             });
+      # Layer 3: proofshot evidence (PR only, ~30s/capture, gate to PR not push)
+      - name: Post visual evidence (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          cd tests
+          python3 /home/sc/workspace/proofshot/cli.py pr ${{ github.event.pull_request.number }}
+        continue-on-error: true
+
+      # Layer 4: refqa smoke (~30s/step, ~30-40% LLM flake — PR + nightly only)
+      # refqa YAML: tests/smoke/*.yaml
+      # Run only on PRs, not every push, due to LLM cost

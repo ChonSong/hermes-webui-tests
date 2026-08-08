@@ -1,0 +1,9 @@
+name: hermes-webui-basics
+steps:
+  - description: "Load the chat shell and verify the avatar titlebar button is visible"
+    action: goto http://localhost:8788/
+    assert: HermesEmotionAvatar API loaded and avatar titlebar button visible
+
+  - description: "Switch the avatar to neko model and confirm overlay persists"
+    action: click #hwx-avatar-titlebar-btn
+    assert: avatar settings panel appears and overlay is still rendered
