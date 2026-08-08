@@ -11,7 +11,7 @@ export default defineConfig({
     ['html', { outputFolder: 'reports/html' }],
   ],
   use: {
-    baseURL: 'http://localhost:8788',
+    baseURL: 'http://localhost:8790',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
