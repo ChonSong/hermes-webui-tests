@@ -17,4 +17,12 @@ export default defineConfig({
     video: 'retain-on-failure',
     viewport: { width: 1440, height: 900 },
   },
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixels: 2000,
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'css',
+    },
+  },
 });
