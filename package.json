@@ -1,0 +1,16 @@
+{
+  "name": "hermes-webui-tests",
+  "version": "1.0.0",
+  "description": "Visual regression tests for hermes-webui",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:visual": "npx playwright test specs/visual/",
+    "report": "npx playwright show-report reports/html"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}
