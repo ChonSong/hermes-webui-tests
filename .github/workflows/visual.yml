@@ -1,5 +1,13 @@
 name: Visual Regression Tests
 
+# The results comment needs issues:write. Without an explicit block the token gets
+# the repo default (read-only), and 'Post PR comment with results' fails on every
+# run with 'Resource not accessible by integration'.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 on:
   push:
     branches: [main]
@@ -32,8 +40,13 @@ jobs:
             echo "branch=${{ inputs.target_branch }}" >> "$GITHUB_OUTPUT"
             echo "pr=${{ inputs.target_pr }}" >> "$GITHUB_OUTPUT"
           else
-            echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
-            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            # This workflow lives in the TEST-SUITE repo, so `github.repository` is
+            # the suite, not the app under test; and on a pull_request event
+            # `github.ref_name` is the merge ref ('<n>/merge'), which is not a
+            # checkable-out ref. Both made every non-dispatch run fail at the
+            # 'Checkout hermes-webui (app)' step, before the server ever booted.
+            echo "repo=ChonSong/hermes-webui" >> "$GITHUB_OUTPUT"
+            echo "branch=master" >> "$GITHUB_OUTPUT"
             echo "pr=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           fi
 
