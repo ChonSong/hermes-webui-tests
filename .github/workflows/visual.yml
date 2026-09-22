@@ -64,7 +64,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install pyyaml
+          pip install -r app/requirements.txt
           pip install playwright
           playwright install --with-deps chromium
 
@@ -78,7 +78,12 @@ jobs:
           # driving that one both races with it and proves nothing about this PR.
           export HERMES_WEBUI_PORT=8790
           export HERMES_WEBUI_SKIP_ONBOARDING=1
-          nohup python3 bootstrap.py --no-browser --skip-agent-install --foreground 8790 > /tmp/server.log 2>&1 &
+          # server.py directly, not bootstrap.py. bootstrap aborts on a runner with
+          # "[bootstrap] ERROR: Hermes Agent was not found and auto-install was
+          # disabled." — a runner has no Hermes Agent — so the server never started
+          # and every run died at 'Wait for server health'. The app needs only its
+          # own requirements.txt; the agent venv is a developer-machine detail.
+          nohup python3 server.py > /tmp/server.log 2>&1 &
           echo "Server PID: $!"
 
       - name: Wait for server health
