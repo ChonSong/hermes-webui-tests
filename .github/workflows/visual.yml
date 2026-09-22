@@ -60,15 +60,18 @@ jobs:
           cd app
           export HERMES_HOME=/tmp/hw-home
           export HERMES_WEBUI_STATE_DIR=/tmp/hw-state
-          export HERMES_WEBUI_PORT=8788
+          # Dedicated test instance on 8790, matching playwright.config.ts's
+          # baseURL. 8788 is the developer's running dev instance; capturing or
+          # driving that one both races with it and proves nothing about this PR.
+          export HERMES_WEBUI_PORT=8790
           export HERMES_WEBUI_SKIP_ONBOARDING=1
-          nohup python3 bootstrap.py --no-browser --skip-agent-install --foreground 8788 > /tmp/server.log 2>&1 &
+          nohup python3 bootstrap.py --no-browser --skip-agent-install --foreground 8790 > /tmp/server.log 2>&1 &
           echo "Server PID: $!"
 
       - name: Wait for server health
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8788/health; then
+            if curl -sf http://localhost:8790/health; then
               echo "Server is healthy!"
               exit 0
             fi
@@ -115,13 +118,6 @@ jobs:
           retention-days: 7
 
       # refqa is PR-triggered and nightly, not every commit (~30s/step, ~30-40% LLM flake)
-      - name: Post visual evidence (PR only)
-        if: github.event_name == 'pull_request'
-        run: |
-          pip install -e /home/sc/workspace/proofshot 2>/dev/null || true
-          python /home/sc/workspace/proofshot/cli.py pr ${{ steps.target.outputs.pr }} 2>/dev/null || echo "proofshot not available, skipping"
-        continue-on-error: true
-
       - name: Run refqa smoke tests (PR only, nightly)
         if: github.event_name == 'pull_request'
         run: |
@@ -158,14 +154,16 @@ jobs:
               issue_number: context.issue.number,
               body,
             });
-      # Layer 3: proofshot evidence (PR only, ~30s/capture, gate to PR not push)
-      - name: Post visual evidence (PR only)
-        if: github.event_name == 'pull_request'
-        run: |
-          cd tests
-          python3 /home/sc/workspace/proofshot/cli.py pr ${{ github.event.pull_request.number }}
-        continue-on-error: true
 
       # Layer 4: refqa smoke (~30s/step, ~30-40% LLM flake — PR + nightly only)
       # refqa YAML: tests/smoke/*.yaml
-      # Run only on PRs, not every push, due to LLM cost
+      # Run only on PRs, not every push, due to LLM cost.
+      #
+      # Proofshot evidence is deliberately NOT posted from this workflow. Both
+      # copies of that step called `proofshot/cli.py pr <n>` without `--url`, which
+      # the CLI rejects (argparse `required=True`), so neither could ever capture
+      # anything; `pip install -e /home/sc/workspace/proofshot` also failed, since
+      # proofshot is a single-file CLI, not an installable package. The CLI posts
+      # its own comment and release upload besides, duplicating the path Riptide's
+      # Bot 3 (`riptide/proofshotter.py`) already owns. Captures are driven by the
+      # bot against the dedicated instance on :8790.
