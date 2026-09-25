@@ -1,5 +1,13 @@
 name: Visual Regression Tests
 
+# The results comment needs issues:write. Without an explicit block the token gets
+# the repo default (read-only), and 'Post PR comment with results' fails on every
+# run with 'Resource not accessible by integration'.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 on:
   push:
     branches: [main]
@@ -32,8 +40,13 @@ jobs:
             echo "branch=${{ inputs.target_branch }}" >> "$GITHUB_OUTPUT"
             echo "pr=${{ inputs.target_pr }}" >> "$GITHUB_OUTPUT"
           else
-            echo "repo=${{ github.repository }}" >> "$GITHUB_OUTPUT"
-            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            # This workflow lives in the TEST-SUITE repo, so `github.repository` is
+            # the suite, not the app under test; and on a pull_request event
+            # `github.ref_name` is the merge ref ('<n>/merge'), which is not a
+            # checkable-out ref. Both made every non-dispatch run fail at the
+            # 'Checkout hermes-webui (app)' step, before the server ever booted.
+            echo "repo=ChonSong/hermes-webui" >> "$GITHUB_OUTPUT"
+            echo "branch=master" >> "$GITHUB_OUTPUT"
             echo "pr=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -51,7 +64,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install pyyaml
+          pip install -r app/requirements.txt
           pip install playwright
           playwright install --with-deps chromium
 
@@ -60,15 +73,23 @@ jobs:
           cd app
           export HERMES_HOME=/tmp/hw-home
           export HERMES_WEBUI_STATE_DIR=/tmp/hw-state
-          export HERMES_WEBUI_PORT=8788
+          # Dedicated test instance on 8790, matching playwright.config.ts's
+          # baseURL. 8788 is the developer's running dev instance; capturing or
+          # driving that one both races with it and proves nothing about this PR.
+          export HERMES_WEBUI_PORT=8790
           export HERMES_WEBUI_SKIP_ONBOARDING=1
-          nohup python3 bootstrap.py --no-browser --skip-agent-install --foreground 8788 > /tmp/server.log 2>&1 &
+          # server.py directly, not bootstrap.py. bootstrap aborts on a runner with
+          # "[bootstrap] ERROR: Hermes Agent was not found and auto-install was
+          # disabled." — a runner has no Hermes Agent — so the server never started
+          # and every run died at 'Wait for server health'. The app needs only its
+          # own requirements.txt; the agent venv is a developer-machine detail.
+          nohup python3 server.py > /tmp/server.log 2>&1 &
           echo "Server PID: $!"
 
       - name: Wait for server health
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8788/health; then
+            if curl -sf http://localhost:8790/health; then
               echo "Server is healthy!"
               exit 0
             fi
@@ -97,10 +118,18 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
+      # Scope: this job boots the bare app with no extensions installed, so it runs
+      # only the specs that assert on the app itself. The extension-ecosystem specs
+      # (00-global, 01-emotion-avatar, 02-chat-tiling, 03-async-tracker,
+      # 04-session-orchestrator, 05-hermes-desktop, 06-docker-tunnel, system-monitor)
+      # assert on extension scripts and rail buttons that a bare app does not have:
+      # 147 guaranteed failures, which also consumed the 30-minute job timeout
+      # before the suite finished. Those specs are local-only (they need the
+      # extensions installed); this job must not run them.
+      - name: Run Playwright tests (bare app)
         run: |
           cd tests
-          npx playwright test
+          npx playwright test specs/hermes-webui
         continue-on-error: false
 
       - name: Upload test artifacts on failure
@@ -113,6 +142,13 @@ jobs:
             tests/reports/
             /tmp/server.log
           retention-days: 7
+
+      # refqa is PR-triggered and nightly, not every commit (~30s/step, ~30-40% LLM flake)
+      - name: Run refqa smoke tests (PR only, nightly)
+        if: github.event_name == 'pull_request'
+        run: |
+          refqa validate tests/smoke/hermes-webui-basics.yaml || echo "refqa not available, skipping"
+        continue-on-error: true
 
       - name: Post PR comment with results
         if: github.event_name == 'pull_request' && always()
@@ -144,3 +180,16 @@ jobs:
               issue_number: context.issue.number,
               body,
             });
+
+      # Layer 4: refqa smoke (~30s/step, ~30-40% LLM flake — PR + nightly only)
+      # refqa YAML: tests/smoke/*.yaml
+      # Run only on PRs, not every push, due to LLM cost.
+      #
+      # Proofshot evidence is deliberately NOT posted from this workflow. Both
+      # copies of that step called `proofshot/cli.py pr <n>` without `--url`, which
+      # the CLI rejects (argparse `required=True`), so neither could ever capture
+      # anything; `pip install -e /home/sc/workspace/proofshot` also failed, since
+      # proofshot is a single-file CLI, not an installable package. The CLI posts
+      # its own comment and release upload besides, duplicating the path Riptide's
+      # Bot 3 (`riptide/proofshotter.py`) already owns. Captures are driven by the
+      # bot against the dedicated instance on :8790.
