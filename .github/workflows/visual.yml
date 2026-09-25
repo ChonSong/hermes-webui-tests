@@ -110,18 +110,23 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: tests/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install test dependencies
         run: |
-          cd tests
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        run: |
-          cd tests
-          npx playwright test
+      # Scope: this job boots the bare app with no extensions installed, so it runs
+      # only the specs that assert on the app itself. The extension-ecosystem specs
+      # (00-global, 01-emotion-avatar, 02-chat-tiling, 03-async-tracker,
+      # 04-session-orchestrator, 05-hermes-desktop, 06-docker-tunnel, system-monitor)
+      # assert on extension scripts and rail buttons that a bare app does not have:
+      # 147 guaranteed failures, which also consumed the 30-minute job timeout
+      # before the suite finished. Those specs are local-only (they need the
+      # extensions installed); this job must not run them.
+      - name: Run Playwright tests (bare app)
+        run: npx playwright test specs/hermes-webui
         continue-on-error: false
 
       - name: Upload test artifacts on failure
@@ -130,8 +135,8 @@ jobs:
         with:
           name: test-results-${{ github.run_id }}
           path: |
-            tests/test-results/
-            tests/reports/
+            test-results/
+            reports/
             /tmp/server.log
           retention-days: 7
 
