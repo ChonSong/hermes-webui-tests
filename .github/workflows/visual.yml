@@ -110,10 +110,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: tests/package-lock.json
 
       - name: Install test dependencies
         run: |
+          cd tests
           npm ci
           npx playwright install --with-deps chromium
 
@@ -126,7 +127,9 @@ jobs:
       # before the suite finished. Those specs are local-only (they need the
       # extensions installed); this job must not run them.
       - name: Run Playwright tests (bare app)
-        run: npx playwright test specs/hermes-webui
+        run: |
+          cd tests
+          npx playwright test specs/hermes-webui
         continue-on-error: false
 
       - name: Upload test artifacts on failure
@@ -135,8 +138,8 @@ jobs:
         with:
           name: test-results-${{ github.run_id }}
           path: |
-            test-results/
-            reports/
+            tests/test-results/
+            tests/reports/
             /tmp/server.log
           retention-days: 7
 
